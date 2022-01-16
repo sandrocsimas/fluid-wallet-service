@@ -1,0 +1,31 @@
+{
+  "rules": {
+    "max-len": ["error", {"code": 999, "tabWidth": 2}],
+    "object-curly-spacing": ["error", "never"],
+    "strict": ["error", "safe"]
+  },
+  "parserOptions": {
+    "sourceType": "script"
+  },
+  "env": {
+    "node": true
+  },
+  "extends": [
+    "eslint:recommended",
+    "airbnb-base",
+    "plugin:mocha/recommended"
+  ],
+  "settings": {
+    "import/resolver": {
+      "node": {
+        "moduleDirectory": [
+          "node_modules",
+          "."
+        ]
+      }
+    }
+  },
+  "plugins": [
+    "mocha"
+  ]
+}
