@@ -21,3 +21,5 @@ function getRequired(property) {
 exports.env = get('app.env', 'development');
 exports.port = get('app.port', 3000);
 exports.debug = get('app.debug', false);
+
+exports.wallets = getRequired('app.wallets');
