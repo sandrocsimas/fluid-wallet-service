@@ -31,7 +31,7 @@ const ecc = require('tiny-secp256k1');
 const sb = require('satoshi-bitcoin');
 const coinSelect = require('coinselect');
 const jayson = require('jayson/promise');
-const Promise = require("bluebird");
+const Promise = require('bluebird');
 const _ = require('lodash');
 
 const btcEnvConfig = configs.wallets.btc;
@@ -78,9 +78,7 @@ function getScriptPubKey(publicKey, scriptPubKeyType = 'p2wpkh') {
 async function getWalletDetails(mnemonic, scriptPubKeyType) {
   const seed = await bip39.mnemonicToSeed(mnemonic);
   const root = bip32Factory.fromSeed(seed, NETWORK);
-  const account = root.derivePath(getDerivationPath(scriptPubKeyType));
-  const node = account.derive(0).derive(0);
-
+  const node = root.derivePath(getDerivationPath(scriptPubKeyType));
   const {address} = getScriptPubKey(node.publicKey, scriptPubKeyType);
   return {
     address,
@@ -112,12 +110,12 @@ function validateSignature(pubkey, msghash, signature) {
   return ecpairFactory.fromPublicKey(pubkey).verify(msghash, signature);
 }
 
-exports.createWallet = async function(scriptPubKeyType) {
+exports.createWallet = (scriptPubKeyType) => {
   const mnemonic = bip39.generateMnemonic();
   return getWalletDetails(mnemonic, scriptPubKeyType);
 };
 
-exports.importWallet = async function(mnemonic, scriptPubKeyType) {
+exports.importWallet = (mnemonic, scriptPubKeyType) => {
   const valid = bip39.validateMnemonic(mnemonic);
   if (!valid) {
     throw new Error('Invalid recovery phrase');
@@ -125,7 +123,7 @@ exports.importWallet = async function(mnemonic, scriptPubKeyType) {
   return getWalletDetails(mnemonic, scriptPubKeyType);
 };
 
-exports.getWallet = async function(address) {
+exports.getWallet = async (address) => {
   const balance = await callElectrumx('blockchain.scripthash.get_balance', [getScriptHash(address)]);
   return {
     address,
@@ -137,20 +135,20 @@ exports.getWallet = async function(address) {
   };
 };
 
-exports.listWalletTransactions = async function(address) {
+exports.listTransactions = async (address) => {
   const transactions = await callElectrumx('blockchain.scripthash.get_history', [getScriptHash(address)]);
   const transactionsPromises = transactions.map((transaction) => callElectrumx('blockchain.transaction.get', [transaction.tx_hash, true]));
   const detailedTransactions = await Promise.all(transactionsPromises);
   return detailedTransactions.reverse();
 };
 
-exports.send = async function(privateKey, fromAddress, toAddress, amount) {
-  const keyPair = ecpairFactory.fromWIF(privateKey, NETWORK);
-  const addressTypeConfig = getAddressTypeConfig(fromAddress);
-
-  const estimatedFee = await callBitcoind('estimatesmartfee', [1]);
+exports.prepareTransaction = async (fromAddress, toAddress, changeAddress, amount) => {
+  let estimatedFee = await callBitcoind('estimatesmartfee', [1]);
   if (estimatedFee.errors) {
-    throw new Error('Error estimating fee');
+    if (btcEnvConfig.network === 'mainnet') {
+      throw new Error('Error estimating fee');
+    }
+    estimatedFee = {feerate: 0.000001};
   }
 
   const feeRate = sb.toSatoshi(estimatedFee.feerate);
@@ -160,18 +158,34 @@ exports.send = async function(privateKey, fromAddress, toAddress, amount) {
     value: sb.toSatoshi(amount),
   };
 
-  const {inputs, outputs, fee} = coinSelect(utxos, [target], feeRate)
-  if (!inputs || !outputs) {
+  const selection = coinSelect(utxos, [target], feeRate);
+  if (!selection.inputs || !selection.outputs) {
     throw new Error('No inputs or outputs provided to create transaction');
   }
+  return {
+    inputs: selection.inputs.map((input) => ({hash: input.tx_hash, vout: input.tx_pos, value: input.value})),
+    outputs: selection.outputs.map((output) => (output.address ? output : {address: changeAddress || fromAddress, value: output.value})),
+    fee: selection.fee,
+  };
+};
+
+exports.broadcastTransaction = async (transactionHex) => {
+  await callElectrumx('blockchain.transaction.broadcast', [transactionHex]);
+  return {};
+};
+
+exports.send = async (privateKey, fromAddress, toAddress, changeAddress, amount) => {
+  const keyPair = ecpairFactory.fromWIF(privateKey, NETWORK);
 
   const psbt = new bitcoin.Psbt({network: NETWORK});
 
-  for (const input of inputs) {
-    const rawTx = await callElectrumx('blockchain.transaction.get', [input.tx_hash]);
+  const {inputs, outputs} = await this.prepareTransaction(fromAddress, toAddress, changeAddress, amount);
+
+  const addressTypeConfig = getAddressTypeConfig(fromAddress);
+  Promise.all(inputs.map(async (input) => {
     const psbtInput = {
-      hash: input.tx_hash,
-      index: input.tx_pos,
+      hash: input.hash,
+      index: input.vout,
     };
     if (addressTypeConfig.segwit) {
       const scriptPubKey = getScriptPubKey(keyPair.publicKey);
@@ -180,17 +194,15 @@ exports.send = async function(privateKey, fromAddress, toAddress, amount) {
         value: input.value,
       };
     } else {
+      const rawTx = await callElectrumx('blockchain.transaction.get', [input.hash]);
       psbtInput.nonWitnessUtxo = Buffer.from(rawTx, 'hex');
     }
     psbt.addInput(psbtInput);
-  }
+  }));
 
   outputs.forEach((output) => {
-    if (!output.address) {
-      output.address = fromAddress;
-    }
     psbt.addOutput({
-      address: output.address,
+      address: output.address || fromAddress,
       value: output.value,
     });
   });
@@ -201,9 +213,9 @@ exports.send = async function(privateKey, fromAddress, toAddress, amount) {
   }
   psbt.finalizeAllInputs();
 
-  const tx = psbt.extractTransaction();
-  await callElectrumx('blockchain.transaction.broadcast', [tx.toHex()]);
+  const transaction = psbt.extractTransaction();
+  this.broadcastTransaction(transaction.toHex());
   return {
-    transaction_id: tx.getId(),
+    transaction_id: transaction.getId(),
   };
 };

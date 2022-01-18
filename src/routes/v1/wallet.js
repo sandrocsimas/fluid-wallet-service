@@ -17,13 +17,23 @@ async function getWallet(req, res) {
   res.json(wallet);
 }
 
-async function listWalletTransactions(req, res) {
-  const transactions = await walletService.listWalletTransactions(req.params.address);
+async function listTransactions(req, res) {
+  const transactions = await walletService.listTransactions(req.params.address);
   res.json(transactions);
 }
 
+async function prepareTransaction(req, res) {
+  const result = await walletService.prepareTransaction(req.params.address, req.body.to_address, req.body.change_address, req.body.amount);
+  res.json(result);
+}
+
+async function broadcastTransaction(req, res) {
+  const result = await walletService.broadcastTransaction(req.body.tx_hex);
+  res.json(result);
+}
+
 async function sendToWallet(req, res) {
-  const result = await walletService.send(req.body.private_key, req.params.address, req.body.to_address, req.body.amount);
+  const result = await walletService.send(req.body.private_key, req.params.address, req.body.to_address, req.body.change_address, req.body.amount);
   res.json(result);
 }
 
@@ -32,7 +42,9 @@ module.exports = (express, app) => {
   router.post('/', createWallet);
   router.post('/import', importWallet);
   router.get('/:address', getWallet);
-  router.get('/:address/transactions', listWalletTransactions);
+  router.get('/:address/transactions', listTransactions);
+  router.post('/:address/transactions/prepare', prepareTransaction);
+  router.post('/:address/transactions/broadcast', broadcastTransaction);
   router.post('/:address/send', sendToWallet);
   app.use('/v1/wallets', router);
 };
