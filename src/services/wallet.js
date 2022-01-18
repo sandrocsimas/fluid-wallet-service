@@ -22,8 +22,6 @@
 
 const configs = require('configs');
 const btcConfig = require('configs/btc.json');
-const Promise = require("bluebird");
-const _ = require('lodash');
 
 const bitcoin = require('bitcoinjs-lib');
 const bip39 = require('bip39');
@@ -33,36 +31,41 @@ const ecc = require('tiny-secp256k1');
 const sb = require('satoshi-bitcoin');
 const coinSelect = require('coinselect');
 const jayson = require('jayson/promise');
+const Promise = require("bluebird");
+const _ = require('lodash');
 
-const NETWORK_NAME = configs.wallets.btc.network;
-const NETWORK = bitcoin.networks[NETWORK_NAME];
+const btcEnvConfig = configs.wallets.btc;
+
+const NETWORK = bitcoin.networks[btcEnvConfig.network];
 
 const SCRIPT_PUB_KEY_TYPES = {
   p2pkh: bitcoin.payments.p2pkh,
-  p2sh: bitcoin.payments.p2sh,
   p2wpkh: bitcoin.payments.p2wpkh,
 };
 
-const electrumXClient = jayson.Client.tls({
-  port: 50002,
+const bip32Factory = BIP32Factory(ecc);
+const ecpairFactory = ECPairFactory(ecc);
+
+const electrumxClient = jayson.Client.tls({
+  port: btcEnvConfig.electrumx.rpcPort,
   rejectUnauthorized: false,
 });
 
 const bitcoindClient = jayson.Client.http({
-  auth: 'rpcuser:rpcpass',
-  port: 8332,
+  auth: `${btcEnvConfig.bitcoind.rpcUser}:${btcEnvConfig.bitcoind.rpcPass}`,
+  port: btcEnvConfig.bitcoind.rpcPort,
 });
 
 function getAddressTypeConfig(address) {
-  return _.find(btcConfig.address_types[NETWORK_NAME], (addressType) => addressType.prefixes.some((prefix) => address.startsWith(prefix)));
+  return _.find(btcConfig.address_types[btcEnvConfig.network], (addressType) => addressType.prefixes.some((prefix) => address.startsWith(prefix)));
 }
 
 function getAddressType(address) {
-  return _.findKey(btcConfig.address_types[NETWORK_NAME], (addressType) => addressType.prefixes.some((prefix) => address.startsWith(prefix)));
+  return _.findKey(btcConfig.address_types[btcEnvConfig.network], (addressType) => addressType.prefixes.some((prefix) => address.startsWith(prefix)));
 }
 
 function getDerivationPath(scriptPubKeyType = 'p2wpkh') {
-  return btcConfig.address_types[NETWORK_NAME][scriptPubKeyType].derivationPath;
+  return btcConfig.address_types[btcEnvConfig.network][scriptPubKeyType].derivationPath;
 }
 
 function getScriptPubKey(publicKey, scriptPubKeyType = 'p2wpkh') {
@@ -89,8 +92,8 @@ async function getWalletDetails(mnemonic, scriptPubKeyType) {
   };
 }
 
-async function callElectrumX(method, params) {
-  const response = await electrumXClient.request(method, params);
+async function callElectrumx(method, params) {
+  const response = await electrumxClient.request(method, params);
   return response.result;
 }
 
@@ -123,7 +126,7 @@ exports.importWallet = async function(mnemonic, scriptPubKeyType) {
 };
 
 exports.getWallet = async function(address) {
-  const balance = await callElectrumX('blockchain.scripthash.get_balance', [getScriptHash(address)]);
+  const balance = await callElectrumx('blockchain.scripthash.get_balance', [getScriptHash(address)]);
   return {
     address,
     address_type: getAddressType(address),
@@ -135,15 +138,14 @@ exports.getWallet = async function(address) {
 };
 
 exports.listWalletTransactions = async function(address) {
-  const transactions = await callElectrumX('blockchain.scripthash.get_history', [getScriptHash(address)]);
-  const transactionsPromises = transactions.map((transaction) => callElectrumX('blockchain.transaction.get', [transaction.tx_hash, true]));
+  const transactions = await callElectrumx('blockchain.scripthash.get_history', [getScriptHash(address)]);
+  const transactionsPromises = transactions.map((transaction) => callElectrumx('blockchain.transaction.get', [transaction.tx_hash, true]));
   const detailedTransactions = await Promise.all(transactionsPromises);
   return detailedTransactions.reverse();
 };
 
 exports.send = async function(privateKey, fromAddress, toAddress, amount) {
   const keyPair = ecpairFactory.fromWIF(privateKey, NETWORK);
-  const scriptPubKey = getScriptPubKey(keyPair.publicKey);
   const addressTypeConfig = getAddressTypeConfig(fromAddress);
 
   const estimatedFee = await callBitcoind('estimatesmartfee', [1]);
@@ -152,7 +154,7 @@ exports.send = async function(privateKey, fromAddress, toAddress, amount) {
   }
 
   const feeRate = sb.toSatoshi(estimatedFee.feerate);
-  const utxos = (await callElectrumX('blockchain.scripthash.listunspent', [getScriptHash(fromAddress)])).filter((utxo) => utxo.height > 0);
+  const utxos = (await callElectrumx('blockchain.scripthash.listunspent', [getScriptHash(fromAddress)])).filter((utxo) => utxo.height > 0);
   const target = {
     address: toAddress,
     value: sb.toSatoshi(amount),
@@ -166,12 +168,13 @@ exports.send = async function(privateKey, fromAddress, toAddress, amount) {
   const psbt = new bitcoin.Psbt({network: NETWORK});
 
   for (const input of inputs) {
-    const rawTx = await callElectrumX('blockchain.transaction.get', [input.tx_hash]);
+    const rawTx = await callElectrumx('blockchain.transaction.get', [input.tx_hash]);
     const psbtInput = {
       hash: input.tx_hash,
       index: input.tx_pos,
     };
     if (addressTypeConfig.segwit) {
+      const scriptPubKey = getScriptPubKey(keyPair.publicKey);
       psbtInput.witnessUtxo = {
         script: scriptPubKey.output,
         value: input.value,
@@ -179,7 +182,6 @@ exports.send = async function(privateKey, fromAddress, toAddress, amount) {
     } else {
       psbtInput.nonWitnessUtxo = Buffer.from(rawTx, 'hex');
     }
-    console.log(psbtInput)
     psbt.addInput(psbtInput);
   }
 
@@ -200,7 +202,7 @@ exports.send = async function(privateKey, fromAddress, toAddress, amount) {
   psbt.finalizeAllInputs();
 
   const tx = psbt.extractTransaction();
-  await callElectrumX('blockchain.transaction.broadcast', [tx.toHex()]);
+  await callElectrumx('blockchain.transaction.broadcast', [tx.toHex()]);
   return {
     transaction_id: tx.getId(),
   };
