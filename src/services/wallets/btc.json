@@ -6,11 +6,6 @@
         "derivationPath": "m/44'/0'/0'/0/0",
         "witness": false
       },
-      "p2sh": {
-        "prefixes": ["3"],
-        "derivationPath": "m/44'/0'/0'/0/0",
-        "witness": false
-      },
       "p2wpkh": {
         "prefixes": ["bc1q"],
         "derivationPath": "m/84'/0'/0'/0/0",
@@ -23,11 +18,6 @@
         "derivationPath": "m/44'/0'/0'/0/0",
         "witness": false
       },
-      "p2sh": {
-        "prefixes": ["2"],
-        "derivationPath": "m/44'/0'/0'/0/0",
-        "witness": false
-      },
       "p2wpkh": {
         "prefixes": ["tb1q"],
         "derivationPath": "m/84'/0'/0'/0/0",
@@ -37,11 +27,6 @@
     "regtest": {
       "p2pkh": {
         "prefixes": ["m", "n"],
-        "derivationPath": "m/44'/0'/0'/0/0",
-        "witness": false
-      },
-      "p2sh": {
-        "prefixes": ["2"],
         "derivationPath": "m/44'/0'/0'/0/0",
         "witness": false
       },

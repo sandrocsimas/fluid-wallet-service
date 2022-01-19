@@ -4,7 +4,7 @@ const path = require('path');
 const yaml = require('yamljs');
 const _ = require('lodash');
 
-const configs = yaml.load(path.resolve('configs.yml'));
+const configs = yaml.load(path.resolve('configs.yaml'));
 
 function get(property, defaultValue) {
   return _.get(configs, property, defaultValue);

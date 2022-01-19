@@ -1,4 +1,0 @@
-app:
-  env: development
-  port: 3000
-  debug: false

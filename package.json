@@ -1,8 +1,10 @@
 {
   "name": "wallet-service",
   "version": "1.0.0",
-  "private": true,
-  "description": "",
+  "description": "Wallet service",
+  "homepage": "https://github.com/sandrocsimas/wallet-service#readme",
+  "author": "Sandro Simas <sandro.csimas@gmail.com>",
+  "license": "ISC",
   "main": "app.js",
   "scripts": {
     "lint": "eslint '**/*.js'",
@@ -10,8 +12,13 @@
     "debug": "nodemon --inspect src/app.js",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
-  "author": "Sandro Simas <sandro.csimas@gmail.com>",
-  "license": "ISC",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/sandrocsimas/wallet-service.git"
+  },
+  "bugs": {
+    "url": "https://github.com/sandrocsimas/wallet-service/issues"
+  },
   "devDependencies": {
     "eslint": "8.6.0",
     "eslint-config-airbnb-base": "15.0.0",

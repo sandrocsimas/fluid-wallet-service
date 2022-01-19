@@ -1,8 +1,8 @@
 'use strict';
 
-const walletRoutesV1 = require('routes/v1/wallet');
+const btcWalletRoutesV1 = require('routes/v1/wallets/btc');
 
 exports.configure = (express, app) => {
   console.log('Configuring routes');
-  walletRoutesV1(express, app);
+  btcWalletRoutesV1(express, app);
 };

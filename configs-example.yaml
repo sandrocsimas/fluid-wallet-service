@@ -1,0 +1,13 @@
+app:
+  env: development
+  port: 3000
+  debug: false
+  wallets:
+    network: regtest
+    btc:
+      bitcoind:
+        rpcUser: rpcuser
+        rpcPass: rpcpass
+        rpcPort: 8332
+      electrumx:
+        rpcPort: 50002

@@ -1,6 +1,6 @@
 'use strict';
 
-const walletService = require('services/wallet');
+const walletService = require('services/wallets/btc');
 
 async function createWallet(req, res) {
   const wallet = await walletService.createWallet(req.query.address_type);
@@ -46,5 +46,5 @@ module.exports = (express, app) => {
   router.post('/:address/transactions/prepare', prepareTransaction);
   router.post('/:address/transactions/broadcast', broadcastTransaction);
   router.post('/:address/send', sendToWallet);
-  app.use('/v1/wallets', router);
+  app.use('/v1/btc/wallets', router);
 };
